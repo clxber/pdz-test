@@ -7,7 +7,11 @@ jobs:
   connectivity-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Test with curl (HEAD)
-        run: |
-          echo "=== curl HEAD request ==="
-          curl -I -m 10 http://bfts.5read.com/pdz/15431837unRegister.pdz
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Python dependencies
+        run: pip install requests
+
+      - name: Run connectivity test
+        run: python test.py
