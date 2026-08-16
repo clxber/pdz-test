@@ -62,7 +62,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin main --rebase
           git add -A
           TZ='Asia/Shanghai' date +%Y-%m-%d > date.txt
           DATE=$(cat date.txt)
@@ -71,6 +70,7 @@ jobs:
             git rm "$FLAG" || true
           fi
           git diff --staged --quiet || git commit -m "更新检测进度 [skip ci]"
+          git pull origin main --rebase
           git push
 
       - name: 上传 Artifact（备选）
