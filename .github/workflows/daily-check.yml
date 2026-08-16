@@ -1,0 +1,81 @@
+name: PDZ 每日自动检测（每小时一次，每次44分钟）
+
+on:
+  schedule:
+    - cron: '0 17-23 * * *'    # 北京 1:00-7:00
+    - cron: '0 0-15 * * *'     # 北京 8:00-23:00
+  workflow_dispatch:
+
+concurrency:
+  group: pdz-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 安装依赖
+        run: pip install requests
+
+      - name: 运行检测（最多44分钟）
+        run: python check_pdz.py --max-minutes 44
+
+      - name: 发送邮件通知（判断本轮是否完成）
+        if: success()
+        run: |
+          TZ='Asia/Shanghai' date +%Y-%m-%d > date.txt
+          DATE=$(cat date.txt)
+          FLAG="email_notify_${DATE}.txt"
+          if [ -f "$FLAG" ]; then
+            echo "FLAG_EXISTS=true" >> $GITHUB_ENV
+            echo "SNAPSHOT=valid_${DATE}.txt" >> $GITHUB_ENV
+          else
+            echo "FLAG_EXISTS=false" >> $GITHUB_ENV
+          fi
+
+      - name: 发送邮件（仅当本轮完成时）
+        if: env.FLAG_EXISTS == 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "📧 PDZ 检测完成 - ${{ env.SNAPSHOT }}"
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_FROM }}
+          body: |
+            本轮 PDZ 检测已全部完成。
+            有效链接列表见附件。
+            生成时间：$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
+          attachments: ${{ env.SNAPSHOT }}
+
+      - name: 提交更新（包括删除邮件标志）
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          TZ='Asia/Shanghai' date +%Y-%m-%d > date.txt
+          DATE=$(cat date.txt)
+          FLAG="email_notify_${DATE}.txt"
+          if [ -f "$FLAG" ]; then
+            git rm "$FLAG" || true
+          fi
+          git diff --staged --quiet || git commit -m "更新检测进度 [skip ci]"
+          git push
+
+      - name: 上传 Artifact（备选）
+        uses: actions/upload-artifact@v4
+        with:
+          name: valid_links_${{ github.run_id }}
+          path: |
+            valid_links.txt
+            valid_*.txt
