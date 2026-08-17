@@ -13,7 +13,7 @@ VALID_OUTPUT_FILE = "valid_links.txt"
 PROGRESS_FILE = "progress.txt"
 ROUND_DATE_FILE = "round_done.txt"
 TIMEOUT = 30
-REQUEST_DELAY = 0.5
+REQUEST_DELAY = 0.3
 
 def load_ss_list():
     if not os.path.exists(SS_LIST_FILE):
