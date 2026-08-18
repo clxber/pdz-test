@@ -94,6 +94,7 @@ def create_snapshot():
     except Exception as e:
         print(f"⚠️ 生成快照失败：{e}")
 
+# 此函数已不再使用，保留但不会调用
 def create_email_flag():
     today = date.today().isoformat()
     flag_file = f"email_notify_{today}.txt"
@@ -122,7 +123,7 @@ def main():
                 os.remove(f)
         cleanup_old_snapshots()
         create_snapshot()
-        create_email_flag()
+        # create_email_flag()   # ✅ 已注释掉，不再生成邮件标志文件
         return
 
     cur = get_progress()
@@ -179,7 +180,7 @@ def main():
     set_round_done_date(today)
     set_progress(-1)
     create_snapshot()
-    create_email_flag()
+    # create_email_flag()   # ✅ 已注释掉，不再生成邮件标志文件
     cleanup_old_snapshots()
 
 if __name__ == "__main__":
