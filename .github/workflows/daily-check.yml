@@ -2,8 +2,8 @@ name: PDZ 每日自动检测（每小时一次，每次44分钟）
 
 on:
   schedule:
-    - cron: '0 17-23 * * *'
-    - cron: '0 0-15 * * *'
+    - cron: '0 17-23 * * *'    # 北京 1:00-7:00
+    - cron: '0 0-15 * * *'     # 北京 8:00-23:59
   workflow_dispatch:
 
 concurrency:
@@ -25,57 +25,19 @@ jobs:
       - name: 安装依赖
         run: pip install requests
 
-      # ✅ 新增：在脚本运行前拉取最新进度（解决排队导致旧进度的问题）
       - name: 拉取最新进度
         run: git pull origin main --rebase
 
       - name: 运行检测（最多44分钟）
         run: python check_pdz.py --max-minutes 44
 
-      - name: 发送邮件通知（判断本轮是否完成）
-        if: success()
-        run: |
-          TZ='Asia/Shanghai' date +%Y-%m-%d > date.txt
-          DATE=$(cat date.txt)
-          FLAG="email_notify_${DATE}.txt"
-          if [ -f "$FLAG" ]; then
-            echo "FLAG_EXISTS=true" >> $GITHUB_ENV
-            echo "SNAPSHOT=valid_${DATE}.txt" >> $GITHUB_ENV
-          else
-            echo "FLAG_EXISTS=false" >> $GITHUB_ENV
-          fi
-
-      - name: 发送邮件（仅当本轮完成时）
-        if: env.FLAG_EXISTS == 'true'
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: ${{ secrets.SMTP_SERVER }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          username: ${{ secrets.SMTP_USERNAME }}
-          password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "📧 PDZ 检测完成 - ${{ env.SNAPSHOT }}"
-          to: ${{ secrets.MAIL_TO }}
-          from: ${{ secrets.MAIL_FROM }}
-          body: |
-            本轮 PDZ 检测已全部完成。
-            有效链接列表见附件。
-            生成时间：$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
-          attachments: ${{ env.SNAPSHOT }}
-
-      # ✅ 修正：先 add + commit，再 pull --rebase，最后 push
-      - name: 提交更新（包括删除邮件标志）
+      - name: 提交更新
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          TZ='Asia/Shanghai' date +%Y-%m-%d > date.txt
-          DATE=$(cat date.txt)
-          FLAG="email_notify_${DATE}.txt"
-          if [ -f "$FLAG" ]; then
-            git rm "$FLAG" || true
-          fi
           git diff --staged --quiet || git commit -m "更新检测进度 [skip ci]"
-          git pull origin main --rebase   # 放在 commit 之后，push 之前
+          git pull origin main --rebase
           git push
 
       - name: 上传 Artifact（备选）
