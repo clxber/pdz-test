@@ -23,10 +23,20 @@ def load_ss_list():
 
 
 def load_valid_links():
+    """只读取完整 URL 格式的 valid_links.txt"""
     if not os.path.exists(VALID_LINKS_FILE):
         return set()
+    valid_set = set()
     with open(VALID_LINKS_FILE, 'r') as f:
-        return set(line.strip() for line in f if line.strip())
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            # 提取纯 SS 号：http://bfts.5read.com/pdz/14858789unRegister.pdz -> 14858789
+            ss = line.split('/')[-1].replace('unRegister.pdz', '')
+            if ss:
+                valid_set.add(ss)
+    return valid_set
 
 
 def load_progress():
@@ -47,13 +57,14 @@ def save_progress(index):
 
 
 def save_valid_link(ss):
+    """保存为完整 URL 格式"""
+    url = f"http://bfts.5read.com/pdz/{ss}unRegister.pdz"
     with open(VALID_LINKS_FILE, 'a') as f:
-        f.write(ss + '\n')
+        f.write(url + '\n')
 
 
 # ======================== 48小时冷却机制 ========================
 def get_round_done_time():
-    """读取上一轮完成的时间戳；无记录返回 None"""
     if not os.path.exists(ROUND_DONE_FILE):
         return None
     with open(ROUND_DONE_FILE, 'r') as f:
@@ -67,7 +78,6 @@ def get_round_done_time():
 
 
 def is_in_cooldown():
-    """判断是否还在 48 小时冷却期内"""
     last_done = get_round_done_time()
     if last_done is None:
         return False
@@ -76,7 +86,6 @@ def is_in_cooldown():
 
 
 def mark_round_done():
-    """记录轮次完成时刻"""
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     with open(ROUND_DONE_FILE, 'w') as f:
         f.write(now)
@@ -84,7 +93,6 @@ def mark_round_done():
 
 
 def clear_round_done():
-    """清空轮次完成标记，准备开始新一轮"""
     with open(ROUND_DONE_FILE, 'w') as f:
         f.write('')
 # =========================================================
@@ -100,7 +108,6 @@ def main():
     progress = load_progress()
 
     if progress == -1:
-        # 上一轮已完成，检查冷却期
         if is_in_cooldown():
             last_done = get_round_done_time()
             elapsed = datetime.datetime.now() - last_done
@@ -108,7 +115,6 @@ def main():
             print(f"⏸️ 轮次冷却中 | 距上次完成 {elapsed} | 还需等待约 {remaining}")
             sys.exit(0)
         else:
-            # 冷却结束，开始新一轮
             last_done = get_round_done_time()
             if last_done:
                 elapsed = datetime.datetime.now() - last_done
@@ -143,7 +149,6 @@ def main():
             save_progress(idx + 1)
             continue
 
-        # 检查运行时长
         elapsed_minutes = (time.time() - start_time) / 60
         if max_minutes > 0 and elapsed_minutes > max_minutes:
             print(f"⏰ 达到最大运行时间 ({max_minutes} 分钟)，保存进度并退出。")
@@ -157,7 +162,7 @@ def main():
             if resp.status_code == 200:
                 print(f"[{idx+1}/{total}] ✅ {ss} 有效 (Status: 200)")
                 valid_set.add(ss)
-                save_valid_link(ss)
+                save_valid_link(ss)   # 写入完整 URL
             else:
                 print(f"[{idx+1}/{total}] ❌ {ss} 无效 (Status: {resp.status_code})")
 
@@ -173,7 +178,6 @@ def main():
         save_progress(idx + 1)
         time.sleep(REQUEST_DELAY)
 
-    # ---------- 全部完成 ----------
     print("🎉 所有 SS 号检测完成！")
     mark_round_done()
     save_progress(-1)
