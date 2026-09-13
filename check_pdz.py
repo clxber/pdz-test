@@ -1,187 +1,183 @@
 import requests
 import time
-import os
-import sys
 import argparse
-from datetime import datetime, date, timedelta
-import re
+import sys
+import os
+import datetime
 
-BASE_URL = "http://bfts.5read.com/pdz/"
-SUFFIX = "unRegister.pdz"
-SS_LIST_FILE = "ss_list.txt"
-VALID_OUTPUT_FILE = "valid_links.txt"
-PROGRESS_FILE = "progress.txt"
-ROUND_DATE_FILE = "round_done.txt"
+# ======================== 配置参数 ========================
+SS_LIST_FILE = 'ss_list.txt'
+PROGRESS_FILE = 'progress.txt'
+VALID_LINKS_FILE = 'valid_links.txt'
+ROUND_DONE_FILE = 'round_done.txt'
+
 TIMEOUT = 30
 REQUEST_DELAY = 0.3
+COOLDOWN_HOURS = 48  # 每轮完成后冷却 48 小时
+# =========================================================
+
 
 def load_ss_list():
-    if not os.path.exists(SS_LIST_FILE):
-        print(f"❌ 错误：找不到 {SS_LIST_FILE}")
-        sys.exit(1)
-    with open(SS_LIST_FILE, "r", encoding="utf-8") as f:
-        return [line.strip() for line in f if line.strip().isdigit()]
+    with open(SS_LIST_FILE, 'r') as f:
+        return [line.strip() for line in f if line.strip()]
 
-def load_valid_set():
-    valid_set = set()
-    if os.path.exists(VALID_OUTPUT_FILE):
-        with open(VALID_OUTPUT_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                url = line.strip()
-                if not url:
-                    continue
-                if "/pdz/" in url and "unRegister.pdz" in url:
-                    try:
-                        ss = url.split("/pdz/")[1].replace("unRegister.pdz", "")
-                        valid_set.add(ss)
-                    except:
-                        pass
-    return valid_set
 
-def get_progress():
-    if os.path.exists(PROGRESS_FILE):
-        with open(PROGRESS_FILE, "r", encoding="utf-8") as f:
-            val = f.read().strip()
-            if val == "-1":
-                return -1
-            if val.isdigit():
-                return int(val)
-    return 0
+def load_valid_links():
+    if not os.path.exists(VALID_LINKS_FILE):
+        return set()
+    with open(VALID_LINKS_FILE, 'r') as f:
+        return set(line.strip() for line in f if line.strip())
 
-def set_progress(idx):
-    with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
-        f.write(str(idx))
 
-def get_round_done_date():
-    if os.path.exists(ROUND_DATE_FILE):
-        with open(ROUND_DATE_FILE, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    return None
-
-def set_round_done_date(d):
-    with open(ROUND_DATE_FILE, "w", encoding="utf-8") as f:
-        f.write(d)
-
-def append_valid_link(url):
-    with open(VALID_OUTPUT_FILE, "a", encoding="utf-8") as f:
-        f.write(url + "\n")
-
-def cleanup_old_snapshots(keep_days=30):
-    cutoff = date.today() - timedelta(days=keep_days)
-    cutoff_str = cutoff.isoformat()
-    for f in os.listdir("."):
-        if f.startswith("valid_") and f.endswith(".txt") and f != "valid_links.txt":
-            try:
-                date_part = f[6:16]
-                if date_part < cutoff_str:
-                    os.remove(f)
-                    print(f"🗑️ 删除旧快照: {f}")
-            except:
-                pass
-
-def create_snapshot():
-    if not os.path.exists(VALID_OUTPUT_FILE):
-        print("⚠️ 没有有效链接可生成快照")
-        return
-    today = date.today().isoformat()
-    snapshot_name = f"valid_{today}.txt"
+def load_progress():
+    """读取进度，-1 表示上一轮已完成"""
+    if not os.path.exists(PROGRESS_FILE):
+        return 0
+    with open(PROGRESS_FILE, 'r') as f:
+        content = f.read().strip()
     try:
-        with open(VALID_OUTPUT_FILE, "r", encoding="utf-8") as src:
-            content = src.read()
-        with open(snapshot_name, "w", encoding="utf-8") as dst:
-            dst.write(content)
-        print(f"📸 已生成快照：{snapshot_name}")
-    except Exception as e:
-        print(f"⚠️ 生成快照失败：{e}")
+        return int(content)
+    except:
+        return 0
 
-# 此函数已不再使用，保留但不会调用
-def create_email_flag():
-    today = date.today().isoformat()
-    flag_file = f"email_notify_{today}.txt"
-    with open(flag_file, "w", encoding="utf-8") as f:
-        f.write("本轮检测完成，请查收附件。")
-    print(f"📧 已创建邮件通知标志：{flag_file}")
+
+def save_progress(index):
+    with open(PROGRESS_FILE, 'w') as f:
+        f.write(str(index))
+
+
+def save_valid_link(ss):
+    with open(VALID_LINKS_FILE, 'a') as f:
+        f.write(ss + '\n')
+
+
+# ======================== 48小时冷却机制 ========================
+def get_round_done_time():
+    """读取上一轮完成的时间戳；无记录返回 None"""
+    if not os.path.exists(ROUND_DONE_FILE):
+        return None
+    with open(ROUND_DONE_FILE, 'r') as f:
+        content = f.read().strip()
+    if not content:
+        return None
+    try:
+        return datetime.datetime.strptime(content, '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        return None
+
+
+def is_in_cooldown():
+    """判断是否还在 48 小时冷却期内"""
+    last_done = get_round_done_time()
+    if last_done is None:
+        return False
+    elapsed = datetime.datetime.now() - last_done
+    return elapsed < datetime.timedelta(hours=COOLDOWN_HOURS)
+
+
+def mark_round_done():
+    """记录轮次完成时刻"""
+    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    with open(ROUND_DONE_FILE, 'w') as f:
+        f.write(now)
+    print(f"📌 本轮完成，冷却期开始（{COOLDOWN_HOURS} 小时后可开启下一轮）")
+
+
+def clear_round_done():
+    """清空轮次完成标记，准备开始新一轮"""
+    with open(ROUND_DONE_FILE, 'w') as f:
+        f.write('')
+# =========================================================
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max-minutes', type=int, default=44,
-                        help='每次运行的最大分钟数')
+    parser.add_argument('--max-minutes', type=int, default=0, help='最大运行分钟数')
     args = parser.parse_args()
-    max_run_seconds = args.max_minutes * 60
+    max_minutes = args.max_minutes
 
-    ss_list = load_ss_list()
-    total = len(ss_list)
-    print(f"📊 总SS数：{total}")
+    # ---------- 冷却期检查 ----------
+    progress = load_progress()
 
-    valid_set = load_valid_set()
-    print(f"✅ 当前有效SS数：{len(valid_set)}")
-
-    if len(valid_set) == total:
-        print("🎉 所有SS已有效，任务完成。")
-        for f in [PROGRESS_FILE, ROUND_DATE_FILE]:
-            if os.path.exists(f):
-                os.remove(f)
-        cleanup_old_snapshots()
-        create_snapshot()
-        # create_email_flag()   # ✅ 已注释掉，不再生成邮件标志文件
-        return
-
-    cur = get_progress()
-    today = date.today().isoformat()
-    done_date = get_round_done_date()
-
-    if cur == -1:
-        if done_date == today:
-            print("⏳ 今日已完成一轮检测，退出。")
-            return
+    if progress == -1:
+        # 上一轮已完成，检查冷却期
+        if is_in_cooldown():
+            last_done = get_round_done_time()
+            elapsed = datetime.datetime.now() - last_done
+            remaining = datetime.timedelta(hours=COOLDOWN_HOURS) - elapsed
+            print(f"⏸️ 轮次冷却中 | 距上次完成 {elapsed} | 还需等待约 {remaining}")
+            sys.exit(0)
         else:
-            cur = 0
-            set_progress(cur)
-            set_round_done_date("")
+            # 冷却结束，开始新一轮
+            last_done = get_round_done_time()
+            if last_done:
+                elapsed = datetime.datetime.now() - last_done
+                print(f"🔄 冷却期已过（距上次完成 {elapsed}），开始新一轮检测")
+            else:
+                print("🔄 开始新一轮检测")
+            clear_round_done()
+            save_progress(0)
+            progress = 0
 
-    if cur >= total:
-        cur = 0
-        set_progress(cur)
+    # ---------- 加载数据 ----------
+    ss_list = load_ss_list()
+    valid_set = load_valid_links()
+    start_index = progress
+    total = len(ss_list)
 
-    print(f"⏳ 从索引 {cur} 开始")
+    if start_index >= total:
+        print("🎉 本轮全部检测完毕，标记完成。")
+        mark_round_done()
+        save_progress(-1)
+        sys.exit(0)
 
+    print(f"🚀 开始检测 | 总数: {total} | 起始: {start_index} | 已有效: {len(valid_set)}")
     start_time = time.time()
-    while cur < total:
-        elapsed = time.time() - start_time
-        if elapsed > max_run_seconds:
-            set_progress(cur)
-            print(f"⏰ 时间到，保存进度 {cur}，退出。")
-            return
 
-        ss = ss_list[cur]
+    for idx in range(start_index, total):
+        ss = ss_list[idx]
+
+        # 跳过已有效的
         if ss in valid_set:
-            cur += 1
-            set_progress(cur)
+            print(f"[{idx+1}/{total}] {ss} 已有效，跳过。")
+            save_progress(idx + 1)
             continue
 
-        url = f"{BASE_URL}{ss}{SUFFIX}"
-        print(f"[{cur+1}/{total}] 检测 {ss} ... ", end="")
-        try:
-            r = requests.head(url, timeout=TIMEOUT, allow_redirects=True)
-            if r.status_code == 200:
-                print("✅ 有效")
-                valid_set.add(ss)
-                append_valid_link(url)
-            else:
-                print(f"❌ 无效 ({r.status_code})")
-        except Exception as e:
-            print(f"⚠️ 异常: {str(e)[:30]}")
+        # 检查运行时长
+        elapsed_minutes = (time.time() - start_time) / 60
+        if max_minutes > 0 and elapsed_minutes > max_minutes:
+            print(f"⏰ 达到最大运行时间 ({max_minutes} 分钟)，保存进度并退出。")
+            save_progress(idx)
+            sys.exit(0)
 
-        cur += 1
-        set_progress(cur)
+        url = f"http://bfts.5read.com/pdz/{ss}unRegister.pdz"
+
+        try:
+            resp = requests.head(url, timeout=TIMEOUT, allow_redirects=False)
+            if resp.status_code == 200:
+                print(f"[{idx+1}/{total}] ✅ {ss} 有效 (Status: 200)")
+                valid_set.add(ss)
+                save_valid_link(ss)
+            else:
+                print(f"[{idx+1}/{total}] ❌ {ss} 无效 (Status: {resp.status_code})")
+
+        except requests.exceptions.ConnectionError as e:
+            print(f"[{idx+1}/{total}] ⚠️ 网络连接错误: {e}")
+            save_progress(idx)
+            sys.exit(1)
+        except Exception as e:
+            print(f"[{idx+1}/{total}] ⚠️ 未知错误: {e}")
+            save_progress(idx)
+            sys.exit(1)
+
+        save_progress(idx + 1)
         time.sleep(REQUEST_DELAY)
 
-    print("✅ 本轮检测完成！")
-    set_round_done_date(today)
-    set_progress(-1)
-    create_snapshot()
-    # create_email_flag()   # ✅ 已注释掉，不再生成邮件标志文件
-    cleanup_old_snapshots()
+    # ---------- 全部完成 ----------
+    print("🎉 所有 SS 号检测完成！")
+    mark_round_done()
+    save_progress(-1)
+
 
 if __name__ == "__main__":
     main()
