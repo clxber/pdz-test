@@ -1,9 +1,8 @@
-name: PDZ 每日自动检测（每小时一次，每次44分钟）
+name: PDZ 每日自动检测（每天4次，每次5.5小时）
 
 on:
   schedule:
-    - cron: '0 17-23 * * *'    # 北京 1:00-7:00
-    - cron: '0 0-15 * * *'     # 北京 8:00-23:59
+    - cron: '0 0,6,12,18 * * *'    # UTC 0,6,12,18 → 北京 8,14,20,2 点
   workflow_dispatch:
 
 concurrency:
@@ -13,7 +12,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 350              # 5.5小时 = 330分钟，留20分钟余量
     steps:
       - uses: actions/checkout@v6
 
@@ -28,8 +27,8 @@ jobs:
       - name: 拉取最新进度
         run: git pull origin main --rebase
 
-      - name: 运行检测（最多44分钟）
-        run: python check_pdz.py --max-minutes 44
+      - name: 运行检测（最多5.5小时）
+        run: python check_pdz.py --max-minutes 330
 
       - name: 提交更新
         run: |
