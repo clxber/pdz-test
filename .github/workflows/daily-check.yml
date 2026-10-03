@@ -1,4 +1,4 @@
-name: PDZ 每日自动检测（每天4次，每次5.5小时）
+name: PDZ 每日自动检测（每天4次，每次5.83小时）
 
 on:
   schedule:
@@ -11,8 +11,9 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 350              # 5.5小时 = 330分钟，留20分钟余量
+    runs-on: ubuntu-24.04              # 锁定系统版本，避免 Ubuntu 26.04 迁移干扰
+    timeout-minutes: 358               # 5.83小时 = 350分钟，留8分钟给 Git 提交
+
     steps:
       - uses: actions/checkout@v6
 
@@ -27,8 +28,8 @@ jobs:
       - name: 拉取最新进度
         run: git pull origin main --rebase
 
-      - name: 运行检测（最多5.5小时）
-        run: python check_pdz.py --max-minutes 330
+      - name: 运行检测（最多5.83小时）
+        run: python check_pdz.py --max-minutes 350
 
       - name: 提交更新
         run: |
