@@ -13,7 +13,7 @@ VALID_OUTPUT_FILE = "valid_links.txt"
 PROGRESS_FILE = "progress.txt"
 ROUND_DATE_FILE = "round_done.txt"
 TIMEOUT = 30
-REQUEST_DELAY = 0.3
+REQUEST_DELAY = 0.25           # ← 从 0.3 改为 0.25，提速约 6%
 
 def load_ss_list():
     if not os.path.exists(SS_LIST_FILE):
@@ -104,8 +104,8 @@ def create_email_flag():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max-minutes', type=int, default=44,
-                        help='每次运行的最大分钟数')
+    parser.add_argument('--max-minutes', type=int, default=350,
+                        help='每次运行的最大分钟数')       # ← 默认值从 44 改为 350
     args = parser.parse_args()
     max_run_seconds = args.max_minutes * 60
 
