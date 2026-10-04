@@ -13,7 +13,7 @@ VALID_OUTPUT_FILE = "valid_links.txt"
 PROGRESS_FILE = "progress.txt"
 ROUND_DATE_FILE = "round_done.txt"
 TIMEOUT = 30
-REQUEST_DELAY = 0.25           # ← 从 0.3 改为 0.25，提速约 6%
+REQUEST_DELAY = 0.25           # ← 已从 0.3 改为 0.25
 
 def load_ss_list():
     if not os.path.exists(SS_LIST_FILE):
@@ -105,7 +105,7 @@ def create_email_flag():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--max-minutes', type=int, default=350,
-                        help='每次运行的最大分钟数')       # ← 默认值从 44 改为 350
+                        help='每次运行的最大分钟数')
     args = parser.parse_args()
     max_run_seconds = args.max_minutes * 60
 
@@ -128,16 +128,14 @@ def main():
 
     cur = get_progress()
     today = date.today().isoformat()
-    done_date = get_round_done_date()
 
+    # ========== 关键修改：只要上一轮完成，立即开始新一轮，不再判断日期 ==========
     if cur == -1:
-        if done_date == today:
-            print("⏳ 今日已完成一轮检测，退出。")
-            return
-        else:
-            cur = 0
-            set_progress(cur)
-            set_round_done_date("")
+        cur = 0
+        set_progress(cur)
+        set_round_done_date("")
+        print("🔄 上一轮已完成，立即开始新一轮检测")
+    # ==========================================================================
 
     if cur >= total:
         cur = 0
