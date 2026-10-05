@@ -1,8 +1,8 @@
-name: PDZ 每日自动检测（每天4次，每次5.83小时）
+name: PDZ 每日自动检测（2 分片 + 完成合并 + 自动触发）
 
 on:
   schedule:
-    - cron: '0 0,6,12,18 * * *'    # UTC 0,6,12,18 → 北京 8,14,20,2 点
+    - cron: '0 0,6,12,18 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -10,35 +10,110 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  check:
-    runs-on: ubuntu-24.04              # 锁定系统版本，避免 Ubuntu 26.04 迁移干扰
-    timeout-minutes: 358               # 5.83小时 = 350分钟，留8分钟给 Git 提交
-
+  # ==================== 分片 A ====================
+  shard-a:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 358
     steps:
       - uses: actions/checkout@v6
-
-      - name: 设置 Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.10'
-
-      - name: 安装依赖
-        run: pip install requests
-
-      - name: 拉取最新进度
-        run: git pull origin main --rebase
-
-      - name: 运行检测（最多5.83小时）
-        run: python check_pdz.py --max-minutes 350
-
-      - name: 提交更新
+      - run: pip install requests
+      - run: git pull origin main --rebase
+      - name: 运行分片 A（1–40000）
+        run: python check_pdz.py --shard a --max-minutes 350
+      - name: 提交分片 A 进度
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --staged --quiet || git commit -m "更新检测进度 [skip ci]"
-          git pull origin main --rebase
-          git push
+          git diff --staged --quiet || git commit -m "分片A进度 [skip ci]"
+          for i in 1 2 3; do
+            git pull origin main --rebase && git push && break
+            echo "推送失败，重试 $i ..."
+            sleep 5
+          done
+
+  # ==================== 分片 B ====================
+  shard-b:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 358
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - run: pip install requests
+      - run: git pull origin main --rebase
+      - name: 运行分片 B（40001–最后）
+        run: python check_pdz.py --shard b --max-minutes 350
+      - name: 提交分片 B 进度
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "分片B进度 [skip ci]"
+          for i in 1 2 3; do
+            git pull origin main --rebase && git push && break
+            echo "推送失败，重试 $i ..."
+            sleep 5
+          done
+
+  # ==================== 合并 + 重置 + 触发下一轮 ====================
+  merge:
+    needs: [shard-a, shard-b]
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - run: git pull origin main --rebase
+
+      - name: 合并分片结果（仅在两者都完成时）
+        run: python merge_shards.py
+
+      - name: 提交合并结果（如果有改动）
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "合并分片结果 [skip ci]"
+          for i in 1 2 3; do
+            git pull origin main --rebase && git push && break
+            echo "推送失败，重试 $i ..."
+            sleep 5
+          done
+
+      - name: 重置进度并触发下一轮
+        id: check
+        run: |
+          a_done=$(cat progress_a.txt 2>/dev/null | tr -d '\n' || echo "")
+          b_done=$(cat progress_b.txt 2>/dev/null | tr -d '\n' || echo "")
+          echo "A=$a_done, B=$b_done"
+          if [ "$a_done" = "-1" ] && [ "$b_done" = "-1" ]; then
+            echo "✅ 两个分片均已完成，重置进度"
+            echo 0 > progress_a.txt
+            echo 0 > progress_b.txt
+            echo "" > round_done_a.txt
+            echo "" > round_done_b.txt
+            git add -A
+            git diff --staged --quiet || git commit -m "重置进度，开始新一轮 [skip ci]"
+            git push origin main
+            echo "TRIGGER=true" >> $GITHUB_OUTPUT
+          else
+            echo "⏳ 尚有分片未完成，等待下次触发"
+            echo "TRIGGER=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 立即触发下一轮
+        if: steps.check.outputs.TRIGGER == 'true'
+        run: gh workflow run daily-check.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 上传 Artifact（备选）
         uses: actions/upload-artifact@v7
