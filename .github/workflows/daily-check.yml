@@ -1,8 +1,8 @@
-name: PDZ 每日自动检测（2 分片 + 完成合并 + 自动触发）
+name: PDZ 自动检测（2 分片 + 完成合并 + 无缝触发 + 智能兜底）
 
 on:
   schedule:
-    - cron: '0 0,6,12,18 * * *'
+    - cron: '0 0 * * *'   # 每天 UTC 0:00（北京 8:00）兜底触发一次
   workflow_dispatch:
 
 concurrency:
@@ -10,8 +10,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # ==================== 健康检查 ====================
+  health-check:
+    runs-on: ubuntu-24.04
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: 检查是否需要运行
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            # 定时触发（兜底）
+            LAST_COMMIT=$(git log -1 --format=%ct)
+            NOW=$(date +%s)
+            DIFF=$((NOW - LAST_COMMIT))
+            # 8 小时 = 28800 秒
+            if [ $DIFF -lt 28800 ]; then
+              echo "🟢 循环健康运行中（最近8小时内有提交），跳过本次兜底触发。"
+              echo "should_run=false" >> $GITHUB_OUTPUT
+            else
+              echo "🔴 循环可能中断，执行兜底触发。"
+              echo "should_run=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+
   # ==================== 分片 A ====================
   shard-a:
+    needs: health-check
+    if: needs.health-check.outputs.should_run == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 358
     steps:
@@ -37,6 +68,8 @@ jobs:
 
   # ==================== 分片 B ====================
   shard-b:
+    needs: health-check
+    if: needs.health-check.outputs.should_run == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 358
     steps:
@@ -62,7 +95,8 @@ jobs:
 
   # ==================== 合并 + 重置 + 触发下一轮 ====================
   merge:
-    needs: [shard-a, shard-b]
+    needs: [health-check, shard-a, shard-b]
+    if: always() && needs.health-check.outputs.should_run == 'true'
     runs-on: ubuntu-24.04
     permissions:
       actions: write
