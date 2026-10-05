@@ -11,26 +11,24 @@ SUFFIX = "unRegister.pdz"
 SS_LIST_FILE = "ss_list.txt"
 TIMEOUT = 30
 REQUEST_DELAY = 0.25
-SHARD_A_END = 40000            # 分片 A 处理 0–39999
+SHARD_A_END = 41763            # 分片 A 取前 41763 条（第1~41763行），分片 B 取剩余（第41764~83527行）
+SNAPSHOT_DIR = "snapshots"     # ★ 快照目录
 
 # 全局：由 --shard 参数决定
 SHARD = ""
 PROGRESS_FILE = "progress.txt"
 VALID_OUTPUT_FILE = "valid_links.txt"
-ROUND_DATE_FILE = "round_done.txt"
 
 def configure_files(shard):
     """根据分片标识设置文件名"""
-    global SHARD, PROGRESS_FILE, VALID_OUTPUT_FILE, ROUND_DATE_FILE
+    global SHARD, PROGRESS_FILE, VALID_OUTPUT_FILE
     SHARD = shard
     if shard in ("a", "b"):
         PROGRESS_FILE   = f"progress_{shard}.txt"
         VALID_OUTPUT_FILE = f"valid_links_{shard}.txt"
-        ROUND_DATE_FILE = f"round_done_{shard}.txt"
     else:
         PROGRESS_FILE   = "progress.txt"
         VALID_OUTPUT_FILE = "valid_links.txt"
-        ROUND_DATE_FILE = "round_done.txt"
 
 def load_ss_list():
     if not os.path.exists(SS_LIST_FILE):
@@ -85,48 +83,42 @@ def set_progress(idx):
     with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
         f.write(str(idx))
 
-def get_round_done_date():
-    if os.path.exists(ROUND_DATE_FILE):
-        with open(ROUND_DATE_FILE, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    return None
-
-def set_round_done_date(d):
-    with open(ROUND_DATE_FILE, "w", encoding="utf-8") as f:
-        f.write(d)
-
 def append_valid_link(url):
     with open(VALID_OUTPUT_FILE, "a", encoding="utf-8") as f:
         f.write(url + "\n")
 
 def cleanup_old_snapshots(keep_days=10):
-    """清理超过保留天数的快照文件"""
-    cutoff = date.today() - timedelta(days=keep_days)
-    cutoff_str = cutoff.isoformat()
-    for f in os.listdir("."):
-        if f.startswith("valid_") and f.endswith(".txt") and f != VALID_OUTPUT_FILE and not f.startswith("valid_links"):
-            match = re.search(r'(\d{4}-\d{2}-\d{2})', f)
-            if match:
-                date_part = match.group(1)
-                if date_part < cutoff_str:
-                    try:
-                        os.remove(f)
-                        print(f"🗑️ 删除旧快照: {f}")
-                    except Exception as e:
-                        print(f"⚠️ 删除 {f} 失败: {e}")
+    """清理 snapshots/ 目录下超过保留天数的快照"""
+    if not os.path.isdir(SNAPSHOT_DIR):
+        return
+    cutoff_str = (date.today() - timedelta(days=keep_days)).isoformat()
+    for f in os.listdir(SNAPSHOT_DIR):
+        # 只处理 valid_*.txt 格式，避免误删其他文件
+        if not (f.startswith("valid_") and f.endswith(".txt")):
+            continue
+        match = re.search(r'(\d{4}-\d{2}-\d{2})', f)
+        if match and match.group(1) < cutoff_str:
+            path = os.path.join(SNAPSHOT_DIR, f)
+            try:
+                os.remove(path)
+                print(f"🗑️ 删除旧快照: {f}")
+            except Exception as e:
+                print(f"⚠️ 删除 {f} 失败: {e}")
 
 def create_snapshot():
     if not os.path.exists(VALID_OUTPUT_FILE):
         return
+    os.makedirs(SNAPSHOT_DIR, exist_ok=True)
     today = date.today().isoformat()
     prefix = f"valid_{SHARD}_" if SHARD else "valid_"
     snapshot_name = f"{prefix}{today}.txt"
+    snapshot_path = os.path.join(SNAPSHOT_DIR, snapshot_name)
     try:
         with open(VALID_OUTPUT_FILE, "r", encoding="utf-8") as src:
             content = src.read()
-        with open(snapshot_name, "w", encoding="utf-8") as dst:
+        with open(snapshot_path, "w", encoding="utf-8") as dst:
             dst.write(content)
-        print(f"📸 已生成快照：{snapshot_name}")
+        print(f"📸 已生成快照：{SNAPSHOT_DIR}/{snapshot_name}")
     except Exception as e:
         print(f"⚠️ 生成快照失败：{e}")
 
@@ -146,19 +138,17 @@ def main():
     valid_set = load_valid_set()
     print(f"✅ 当前有效SS数（含历史）：{len(valid_set)}")
 
-    if len(valid_set) == total:
+    # 语义修正：检查本分片的每一条是否都已在有效集合里
+    if all(ss in valid_set for ss in ss_list):
         print("🎉 本分片所有SS已有效，任务完成。")
-        for f in [PROGRESS_FILE, ROUND_DATE_FILE]:
-            if os.path.exists(f):
-                os.remove(f)
+        set_progress(-1)
         cleanup_old_snapshots()
         create_snapshot()
         return
 
     cur = get_progress()
-    today = date.today().isoformat()
 
-    # ★★★ 关键改动：分片完成后不再自动重置，直接退出等待另一个分片 ★★★
+    # 分片完成后不自动重置，直接退出等待另一个分片
     if cur == -1:
         print(f"⏸️ 分片 {SHARD} 已完成，等待另一个分片...")
         return
@@ -201,7 +191,6 @@ def main():
         time.sleep(REQUEST_DELAY)
 
     print("✅ 本轮检测完成！")
-    set_round_done_date(today)
     set_progress(-1)
     create_snapshot()
     cleanup_old_snapshots()
