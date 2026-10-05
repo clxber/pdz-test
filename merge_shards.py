@@ -1,5 +1,4 @@
 import os
-import datetime
 
 def read_lines(path):
     if not os.path.exists(path):
@@ -27,7 +26,7 @@ def main():
     print(f"   分片 A：{'✅ 完成' if a_done else '⏳ 进行中'}")
     print(f"   分片 B：{'✅ 完成' if b_done else '⏳ 进行中'}")
 
-    # ★★★ 关键改动：必须两个分片都完成才合并 ★★★
+    # 必须两个分片都完成才合并
     if not (a_done and b_done):
         print("⏳ 两个分片尚未全部完成，跳过合并。")
         return
@@ -45,11 +44,6 @@ def main():
     print(f"📊 分片 B 有效：{len(b)} 条")
     print(f"📊 历史有效：{len(existing)} 条")
     print(f"✅ 合并后总数：{len(merged)} 条（自动去重）")
-
-    today = datetime.date.today().isoformat()
-    with open('round_done.txt', 'w', encoding='utf-8') as f:
-        f.write(today)
-    print(f"📌 整轮完成，写入 round_done.txt = {today}")
 
 if __name__ == '__main__':
     main()
