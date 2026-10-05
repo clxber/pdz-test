@@ -26,7 +26,6 @@ def main():
     print(f"   分片 A：{'✅ 完成' if a_done else '⏳ 进行中'}")
     print(f"   分片 B：{'✅ 完成' if b_done else '⏳ 进行中'}")
 
-    # 必须两个分片都完成才合并
     if not (a_done and b_done):
         print("⏳ 两个分片尚未全部完成，跳过合并。")
         return
@@ -37,13 +36,14 @@ def main():
     b = read_lines('valid_links_b.txt')
     existing = read_lines('valid_links.txt')
 
-    merged = sorted(set(existing + a + b))
+    # ★ 去重但保持插入顺序（历史在前，新增追加到末尾）
+    merged = list(dict.fromkeys(existing + a + b))
     write_lines('valid_links.txt', merged)
 
     print(f"📊 分片 A 有效：{len(a)} 条")
     print(f"📊 分片 B 有效：{len(b)} 条")
     print(f"📊 历史有效：{len(existing)} 条")
-    print(f"✅ 合并后总数：{len(merged)} 条（自动去重）")
+    print(f"✅ 合并后总数：{len(merged)} 条（去重保序）")
 
 if __name__ == '__main__':
     main()
