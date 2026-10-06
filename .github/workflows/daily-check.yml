@@ -29,9 +29,9 @@ jobs:
             LAST_COMMIT=$(git log -1 --format=%ct)
             NOW=$(date +%s)
             DIFF=$((NOW - LAST_COMMIT))
-            # 8 小时 = 28800 秒
-            if [ $DIFF -lt 28800 ]; then
-              echo "🟢 循环健康运行中（最近8小时内有提交），跳过本次兜底触发。"
+            # 24 小时 = 86400 秒
+            if [ $DIFF -lt 86400 ]; then
+              echo "🟢 循环健康运行中（最近24小时内有提交），跳过本次兜底触发。"
               echo "should_run=false" >> $GITHUB_OUTPUT
             else
               echo "🔴 循环可能中断，执行兜底触发。"
@@ -197,7 +197,7 @@ jobs:
     if: always() && needs.health-check.outputs.should_run == 'true'
     runs-on: ubuntu-24.04
     permissions:
-      contents: write    # ★★★ 关键修复：让 merge 能 push ★★★
+      contents: write
       actions: write
     steps:
       - uses: actions/checkout@v6
