@@ -1,4 +1,4 @@
-name: PDZ 自动检测（5 分片 + 完成合并 + 无缝触发 + 智能兜底）
+name: PDZ 自动检测（8 分片 + 完成合并 + 无缝触发 + 智能兜底）
 
 on:
   schedule:
@@ -54,7 +54,7 @@ jobs:
           python-version: '3.12'
       - run: pip install requests
       - run: git pull origin main --rebase
-      - name: 运行分片 A（1–16706）
+      - name: 运行分片 A（1–10441）
         run: python check_pdz.py --shard a --max-minutes 350
       - name: 提交分片 A 进度
         run: |
@@ -92,7 +92,7 @@ jobs:
           python-version: '3.12'
       - run: pip install requests
       - run: git pull origin main --rebase
-      - name: 运行分片 B（16707–33412）
+      - name: 运行分片 B（10442–20882）
         run: python check_pdz.py --shard b --max-minutes 350
       - name: 提交分片 B 进度
         run: |
@@ -130,7 +130,7 @@ jobs:
           python-version: '3.12'
       - run: pip install requests
       - run: git pull origin main --rebase
-      - name: 运行分片 C（33413–50117）
+      - name: 运行分片 C（20883–31323）
         run: python check_pdz.py --shard c --max-minutes 350
       - name: 提交分片 C 进度
         run: |
@@ -168,7 +168,7 @@ jobs:
           python-version: '3.12'
       - run: pip install requests
       - run: git pull origin main --rebase
-      - name: 运行分片 D（50118–66822）
+      - name: 运行分片 D（31324–41764）
         run: python check_pdz.py --shard d --max-minutes 350
       - name: 提交分片 D 进度
         run: |
@@ -206,7 +206,7 @@ jobs:
           python-version: '3.12'
       - run: pip install requests
       - run: git pull origin main --rebase
-      - name: 运行分片 E（66823–最后）
+      - name: 运行分片 E（41765–52205）
         run: python check_pdz.py --shard e --max-minutes 350
       - name: 提交分片 E 进度
         run: |
@@ -229,9 +229,123 @@ jobs:
             exit 1
           fi
 
+  # ==================== 分片 F ====================
+  shard-f:
+    needs: health-check
+    if: needs.health-check.outputs.should_run == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 358
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - run: git pull origin main --rebase
+      - name: 运行分片 F（52206–62646）
+        run: python check_pdz.py --shard f --max-minutes 350
+      - name: 提交分片 F 进度
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "分片F进度 [skip ci]"
+          success=false
+          for i in $(seq 1 10); do
+            if git pull origin main --rebase && git push; then
+              success=true
+              break
+            fi
+            WAIT=$((RANDOM % 21 + 10))
+            echo "推送失败，等待 ${WAIT} 秒后重试（第 $i / 10 次）..."
+            sleep $WAIT
+          done
+          if [ "$success" = "false" ]; then
+            echo "❌ 推送连续失败 10 次，退出。"
+            exit 1
+          fi
+
+  # ==================== 分片 G ====================
+  shard-g:
+    needs: health-check
+    if: needs.health-check.outputs.should_run == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 358
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - run: git pull origin main --rebase
+      - name: 运行分片 G（62647–73087）
+        run: python check_pdz.py --shard g --max-minutes 350
+      - name: 提交分片 G 进度
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "分片G进度 [skip ci]"
+          success=false
+          for i in $(seq 1 10); do
+            if git pull origin main --rebase && git push; then
+              success=true
+              break
+            fi
+            WAIT=$((RANDOM % 21 + 10))
+            echo "推送失败，等待 ${WAIT} 秒后重试（第 $i / 10 次）..."
+            sleep $WAIT
+          done
+          if [ "$success" = "false" ]; then
+            echo "❌ 推送连续失败 10 次，退出。"
+            exit 1
+          fi
+
+  # ==================== 分片 H ====================
+  shard-h:
+    needs: health-check
+    if: needs.health-check.outputs.should_run == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 358
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - run: git pull origin main --rebase
+      - name: 运行分片 H（73088–最后）
+        run: python check_pdz.py --shard h --max-minutes 350
+      - name: 提交分片 H 进度
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "分片H进度 [skip ci]"
+          success=false
+          for i in $(seq 1 10); do
+            if git pull origin main --rebase && git push; then
+              success=true
+              break
+            fi
+            WAIT=$((RANDOM % 21 + 10))
+            echo "推送失败，等待 ${WAIT} 秒后重试（第 $i / 10 次）..."
+            sleep $WAIT
+          done
+          if [ "$success" = "false" ]; then
+            echo "❌ 推送连续失败 10 次，退出。"
+            exit 1
+          fi
+
   # ==================== 合并 + 重置 + 触发下一轮 ====================
   merge:
-    needs: [health-check, shard-a, shard-b, shard-c, shard-d, shard-e]
+    needs: [health-check, shard-a, shard-b, shard-c, shard-d, shard-e, shard-f, shard-g, shard-h]
     if: always() && needs.health-check.outputs.should_run == 'true'
     runs-on: ubuntu-26.04
     permissions:
@@ -276,14 +390,20 @@ jobs:
           c_done=$(cat progress_c.txt 2>/dev/null | tr -d '\n' || echo "")
           d_done=$(cat progress_d.txt 2>/dev/null | tr -d '\n' || echo "")
           e_done=$(cat progress_e.txt 2>/dev/null | tr -d '\n' || echo "")
-          echo "A=$a_done, B=$b_done, C=$c_done, D=$d_done, E=$e_done"
-          if [ "$a_done" = "-1" ] && [ "$b_done" = "-1" ] && [ "$c_done" = "-1" ] && [ "$d_done" = "-1" ] && [ "$e_done" = "-1" ]; then
-            echo "✅ 五个分片均已完成，重置进度"
+          f_done=$(cat progress_f.txt 2>/dev/null | tr -d '\n' || echo "")
+          g_done=$(cat progress_g.txt 2>/dev/null | tr -d '\n' || echo "")
+          h_done=$(cat progress_h.txt 2>/dev/null | tr -d '\n' || echo "")
+          echo "A=$a_done, B=$b_done, C=$c_done, D=$d_done, E=$e_done, F=$f_done, G=$g_done, H=$h_done"
+          if [ "$a_done" = "-1" ] && [ "$b_done" = "-1" ] && [ "$c_done" = "-1" ] && [ "$d_done" = "-1" ] && [ "$e_done" = "-1" ] && [ "$f_done" = "-1" ] && [ "$g_done" = "-1" ] && [ "$h_done" = "-1" ]; then
+            echo "✅ 八个分片均已完成，重置进度"
             echo 0 > progress_a.txt
             echo 0 > progress_b.txt
             echo 0 > progress_c.txt
             echo 0 > progress_d.txt
             echo 0 > progress_e.txt
+            echo 0 > progress_f.txt
+            echo 0 > progress_g.txt
+            echo 0 > progress_h.txt
             git add -A
             git diff --staged --quiet || git commit -m "重置进度，开始新一轮 [skip ci]"
             success=false
