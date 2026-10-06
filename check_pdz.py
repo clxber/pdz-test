@@ -11,8 +11,10 @@ SUFFIX = "unRegister.pdz"
 SS_LIST_FILE = "ss_list.txt"
 TIMEOUT = 30
 REQUEST_DELAY = 0.25
-SHARD_A_END = 41763            # 分片 A 取前 41763 条（第1~41763行），分片 B 取剩余（第41764~83527行）
-SNAPSHOT_DIR = "snapshots"     # ★ 快照目录
+SHARD_A_END = 20882            # 分片 A：第 1~20882 条
+SHARD_B_END = 41764            # 分片 B：第 20883~41764 条
+SHARD_C_END = 62646            # 分片 C：第 41765~62646 条；分片 D：第 62647~83527 条
+SNAPSHOT_DIR = "snapshots"     # 快照目录
 
 # 全局：由 --shard 参数决定
 SHARD = ""
@@ -23,7 +25,7 @@ def configure_files(shard):
     """根据分片标识设置文件名"""
     global SHARD, PROGRESS_FILE, VALID_OUTPUT_FILE
     SHARD = shard
-    if shard in ("a", "b"):
+    if shard in ("a", "b", "c", "d"):
         PROGRESS_FILE   = f"progress_{shard}.txt"
         VALID_OUTPUT_FILE = f"valid_links_{shard}.txt"
     else:
@@ -39,18 +41,22 @@ def load_ss_list():
     if SHARD == "a":
         return full[:SHARD_A_END]
     elif SHARD == "b":
-        return full[SHARD_A_END:]
+        return full[SHARD_A_END:SHARD_B_END]
+    elif SHARD == "c":
+        return full[SHARD_B_END:SHARD_C_END]
+    elif SHARD == "d":
+        return full[SHARD_C_END:]
     return full
 
 def load_valid_set():
     """
     读取有效链接集合：
     - 历史存档 valid_links.txt
-    - 本分片自己的 valid_links_a.txt / valid_links_b.txt
+    - 本分片自己的 valid_links_a.txt / valid_links_b.txt / valid_links_c.txt / valid_links_d.txt
     """
     valid_set = set()
     files_to_read = ["valid_links.txt"]
-    if SHARD in ("a", "b"):
+    if SHARD in ("a", "b", "c", "d"):
         files_to_read.append(VALID_OUTPUT_FILE)
 
     for path in files_to_read:
@@ -126,7 +132,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--max-minutes', type=int, default=350)
     parser.add_argument('--shard', type=str, default='',
-                        help='分片标识：a / b，留空为单线程模式')
+                        help='分片标识：a / b / c / d，留空为单线程模式')
     args = parser.parse_args()
     configure_files(args.shard)
     max_run_seconds = args.max_minutes * 60
@@ -148,9 +154,9 @@ def main():
 
     cur = get_progress()
 
-    # 分片完成后不自动重置，直接退出等待另一个分片
+    # 分片完成后不自动重置，直接退出等待其他分片
     if cur == -1:
-        print(f"⏸️ 分片 {SHARD} 已完成，等待另一个分片...")
+        print(f"⏸️ 分片 {SHARD} 已完成，等待其他分片...")
         return
 
     if cur >= total:
