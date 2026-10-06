@@ -1,4 +1,4 @@
-name: PDZ 自动检测（2 分片 + 完成合并 + 无缝触发 + 智能兜底）
+name: PDZ 自动检测（4 分片 + 完成合并 + 无缝触发 + 智能兜底）
 
 on:
   schedule:
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 358
     permissions:
-      contents: write    # ★ 显式声明（推荐）
+      contents: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -54,7 +54,7 @@ jobs:
           python-version: '3.10'
       - run: pip install requests
       - run: git pull origin main --rebase
-      - name: 运行分片 A（1–41763）
+      - name: 运行分片 A（1–20882）
         run: python check_pdz.py --shard a --max-minutes 350
       - name: 提交分片 A 进度
         run: |
@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 358
     permissions:
-      contents: write    # ★ 显式声明（推荐）
+      contents: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -92,7 +92,7 @@ jobs:
           python-version: '3.10'
       - run: pip install requests
       - run: git pull origin main --rebase
-      - name: 运行分片 B（41764–最后）
+      - name: 运行分片 B（20883–41764）
         run: python check_pdz.py --shard b --max-minutes 350
       - name: 提交分片 B 进度
         run: |
@@ -115,13 +115,89 @@ jobs:
             exit 1
           fi
 
+  # ==================== 分片 C ====================
+  shard-c:
+    needs: health-check
+    if: needs.health-check.outputs.should_run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 358
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - run: pip install requests
+      - run: git pull origin main --rebase
+      - name: 运行分片 C（41765–62646）
+        run: python check_pdz.py --shard c --max-minutes 350
+      - name: 提交分片 C 进度
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "分片C进度 [skip ci]"
+          success=false
+          for i in $(seq 1 10); do
+            if git pull origin main --rebase && git push; then
+              success=true
+              break
+            fi
+            WAIT=$((RANDOM % 21 + 10))
+            echo "推送失败，等待 ${WAIT} 秒后重试（第 $i / 10 次）..."
+            sleep $WAIT
+          done
+          if [ "$success" = "false" ]; then
+            echo "❌ 推送连续失败 10 次，退出。"
+            exit 1
+          fi
+
+  # ==================== 分片 D ====================
+  shard-d:
+    needs: health-check
+    if: needs.health-check.outputs.should_run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 358
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - run: pip install requests
+      - run: git pull origin main --rebase
+      - name: 运行分片 D（62647–最后）
+        run: python check_pdz.py --shard d --max-minutes 350
+      - name: 提交分片 D 进度
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "分片D进度 [skip ci]"
+          success=false
+          for i in $(seq 1 10); do
+            if git pull origin main --rebase && git push; then
+              success=true
+              break
+            fi
+            WAIT=$((RANDOM % 21 + 10))
+            echo "推送失败，等待 ${WAIT} 秒后重试（第 $i / 10 次）..."
+            sleep $WAIT
+          done
+          if [ "$success" = "false" ]; then
+            echo "❌ 推送连续失败 10 次，退出。"
+            exit 1
+          fi
+
   # ==================== 合并 + 重置 + 触发下一轮 ====================
   merge:
-    needs: [health-check, shard-a, shard-b]
+    needs: [health-check, shard-a, shard-b, shard-c, shard-d]
     if: always() && needs.health-check.outputs.should_run == 'true'
     runs-on: ubuntu-24.04
     permissions:
-      contents: write    # ★★★ 关键修复：补上这一行 ★★★
+      contents: write    # ★★★ 关键修复：让 merge 能 push ★★★
       actions: write
     steps:
       - uses: actions/checkout@v6
@@ -130,7 +206,7 @@ jobs:
           python-version: '3.10'
       - run: git pull origin main --rebase
 
-      - name: 合并分片结果（仅在两者都完成时）
+      - name: 合并分片结果（仅在四个都完成时）
         run: python merge_shards.py
 
       - name: 提交合并结果（如果有改动）
@@ -159,11 +235,15 @@ jobs:
         run: |
           a_done=$(cat progress_a.txt 2>/dev/null | tr -d '\n' || echo "")
           b_done=$(cat progress_b.txt 2>/dev/null | tr -d '\n' || echo "")
-          echo "A=$a_done, B=$b_done"
-          if [ "$a_done" = "-1" ] && [ "$b_done" = "-1" ]; then
-            echo "✅ 两个分片均已完成，重置进度"
+          c_done=$(cat progress_c.txt 2>/dev/null | tr -d '\n' || echo "")
+          d_done=$(cat progress_d.txt 2>/dev/null | tr -d '\n' || echo "")
+          echo "A=$a_done, B=$b_done, C=$c_done, D=$d_done"
+          if [ "$a_done" = "-1" ] && [ "$b_done" = "-1" ] && [ "$c_done" = "-1" ] && [ "$d_done" = "-1" ]; then
+            echo "✅ 四个分片均已完成，重置进度"
             echo 0 > progress_a.txt
             echo 0 > progress_b.txt
+            echo 0 > progress_c.txt
+            echo 0 > progress_d.txt
             git add -A
             git diff --staged --quiet || git commit -m "重置进度，开始新一轮 [skip ci]"
             success=false
