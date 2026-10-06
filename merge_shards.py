@@ -19,39 +19,33 @@ def is_shard_done(shard):
         return f.read().strip() == '-1'
 
 def main():
-    a_done = is_shard_done('a')
-    b_done = is_shard_done('b')
-    c_done = is_shard_done('c')
-    d_done = is_shard_done('d')
+    shards = ['a', 'b', 'c', 'd', 'e']
+    status = {s: is_shard_done(s) for s in shards}
 
     print(f"🔍 分片状态：")
-    print(f"   分片 A：{'✅ 完成' if a_done else '⏳ 进行中'}")
-    print(f"   分片 B：{'✅ 完成' if b_done else '⏳ 进行中'}")
-    print(f"   分片 C：{'✅ 完成' if c_done else '⏳ 进行中'}")
-    print(f"   分片 D：{'✅ 完成' if d_done else '⏳ 进行中'}")
+    for s in shards:
+        print(f"   分片 {s.upper()}：{'✅ 完成' if status[s] else '⏳ 进行中'}")
 
-    # 必须四个分片都完成才合并
-    if not (a_done and b_done and c_done and d_done):
-        print("⏳ 四个分片尚未全部完成，跳过合并。")
+    # 必须全部分片都完成才合并
+    if not all(status.values()):
+        print("⏳ 分片尚未全部完成，跳过合并。")
         return
 
-    print("✅ 四个分片均已完成，开始合并...")
+    print("✅ 全部分片均已完成，开始合并...")
 
-    a = read_lines('valid_links_a.txt')
-    b = read_lines('valid_links_b.txt')
-    c = read_lines('valid_links_c.txt')
-    d = read_lines('valid_links_d.txt')
+    merged_list = []
+    for s in shards:
+        lines = read_lines(f'valid_links_{s}.txt')
+        print(f"📊 分片 {s.upper()} 有效：{len(lines)} 条")
+        merged_list.extend(lines)
+
     existing = read_lines('valid_links.txt')
+    print(f"📊 历史有效：{len(existing)} 条")
 
     # 去重但保持插入顺序（历史在前，新增追加到末尾）
-    merged = list(dict.fromkeys(existing + a + b + c + d))
+    merged = list(dict.fromkeys(existing + merged_list))
     write_lines('valid_links.txt', merged)
 
-    print(f"📊 分片 A 有效：{len(a)} 条")
-    print(f"📊 分片 B 有效：{len(b)} 条")
-    print(f"📊 分片 C 有效：{len(c)} 条")
-    print(f"📊 分片 D 有效：{len(d)} 条")
-    print(f"📊 历史有效：{len(existing)} 条")
     print(f"✅ 合并后总数：{len(merged)} 条（去重保序）")
 
 if __name__ == '__main__':
