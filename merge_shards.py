@@ -19,7 +19,7 @@ def is_shard_done(shard):
         return f.read().strip() == '-1'
 
 def main():
-    shards = ['a', 'b', 'c', 'd', 'e']
+    shards = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
     status = {s: is_shard_done(s) for s in shards}
 
     print(f"🔍 分片状态：")
