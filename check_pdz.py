@@ -11,10 +11,13 @@ SUFFIX = "unRegister.pdz"
 SS_LIST_FILE = "ss_list.txt"
 TIMEOUT = 30
 REQUEST_DELAY = 0.25
-SHARD_A_END = 16706            # 分片 A：第 1~16706 条
-SHARD_B_END = 33412            # 分片 B：第 16707~33412 条
-SHARD_C_END = 50117            # 分片 C：第 33413~50117 条
-SHARD_D_END = 66822            # 分片 D：第 50118~66822 条；分片 E：第 66823~83527 条
+SHARD_A_END = 10441            # 分片 A：第 1~10441 条
+SHARD_B_END = 20882            # 分片 B：第 10442~20882 条
+SHARD_C_END = 31323            # 分片 C：第 20883~31323 条
+SHARD_D_END = 41764            # 分片 D：第 31324~41764 条
+SHARD_E_END = 52205            # 分片 E：第 41765~52205 条
+SHARD_F_END = 62646            # 分片 F：第 52206~62646 条
+SHARD_G_END = 73087            # 分片 G：第 62647~73087 条；分片 H：第 73088~83527 条
 SNAPSHOT_DIR = "snapshots"     # 快照目录
 
 # 全局：由 --shard 参数决定
@@ -26,7 +29,7 @@ def configure_files(shard):
     """根据分片标识设置文件名"""
     global SHARD, PROGRESS_FILE, VALID_OUTPUT_FILE
     SHARD = shard
-    if shard in ("a", "b", "c", "d", "e"):
+    if shard in ("a", "b", "c", "d", "e", "f", "g", "h"):
         PROGRESS_FILE   = f"progress_{shard}.txt"
         VALID_OUTPUT_FILE = f"valid_links_{shard}.txt"
     else:
@@ -48,18 +51,24 @@ def load_ss_list():
     elif SHARD == "d":
         return full[SHARD_C_END:SHARD_D_END]
     elif SHARD == "e":
-        return full[SHARD_D_END:]
+        return full[SHARD_D_END:SHARD_E_END]
+    elif SHARD == "f":
+        return full[SHARD_E_END:SHARD_F_END]
+    elif SHARD == "g":
+        return full[SHARD_F_END:SHARD_G_END]
+    elif SHARD == "h":
+        return full[SHARD_G_END:]
     return full
 
 def load_valid_set():
     """
     读取有效链接集合：
     - 历史存档 valid_links.txt
-    - 本分片自己的 valid_links_a.txt ~ valid_links_e.txt
+    - 本分片自己的 valid_links_a.txt ~ valid_links_h.txt
     """
     valid_set = set()
     files_to_read = ["valid_links.txt"]
-    if SHARD in ("a", "b", "c", "d", "e"):
+    if SHARD in ("a", "b", "c", "d", "e", "f", "g", "h"):
         files_to_read.append(VALID_OUTPUT_FILE)
 
     for path in files_to_read:
@@ -135,7 +144,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--max-minutes', type=int, default=350)
     parser.add_argument('--shard', type=str, default='',
-                        help='分片标识：a / b / c / d / e，留空为单线程模式')
+                        help='分片标识：a / b / c / d / e / f / g / h，留空为单线程模式')
     args = parser.parse_args()
     configure_files(args.shard)
     max_run_seconds = args.max_minutes * 60
