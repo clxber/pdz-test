@@ -6,11 +6,6 @@ def read_lines(path):
     with open(path, 'r', encoding='utf-8') as f:
         return [line.strip() for line in f if line.strip()]
 
-def write_lines(path, lines):
-    with open(path, 'w', encoding='utf-8') as f:
-        for line in lines:
-            f.write(line + '\n')
-
 def is_shard_done(shard):
     prog = f'progress_{shard}.txt'
     if not os.path.exists(prog):
@@ -33,20 +28,37 @@ def main():
 
     print("✅ 全部分片均已完成，开始合并...")
 
-    merged_list = []
+    # 读总库（用于去重）
+    existing = read_lines('valid_links.txt')
+    existing_set = set(existing)
+    print(f"📊 总库当前：{len(existing)} 条")
+
+    # 收集各分片本轮新增
+    new_lines = []
     for s in shards:
         lines = read_lines(f'valid_links_{s}.txt')
-        print(f"📊 分片 {s.upper()} 有效：{len(lines)} 条")
-        merged_list.extend(lines)
+        print(f"📊 分片 {s.upper()} 本轮新增：{len(lines)} 条")
+        for line in lines:
+            if line not in existing_set:
+                new_lines.append(line)
+                existing_set.add(line)
 
-    existing = read_lines('valid_links.txt')
-    print(f"📊 历史有效：{len(existing)} 条")
+    # ★ 物理追加写总库（不重写整个文件）
+    if new_lines:
+        with open('valid_links.txt', 'a', encoding='utf-8') as f:
+            for line in new_lines:
+                f.write(line + '\n')
+        print(f"✅ 追加 {len(new_lines)} 条新有效链接到总库")
+    else:
+        print("ℹ️ 本轮无新增有效链接")
 
-    # 去重但保持插入顺序（历史在前，新增追加到末尾）
-    merged = list(dict.fromkeys(existing + merged_list))
-    write_lines('valid_links.txt', merged)
+    print(f"✅ 总库当前总数：{len(existing) + len(new_lines)} 条")
 
-    print(f"✅ 合并后总数：{len(merged)} 条（去重保序）")
+    # ★ 清空所有分片文件（本轮缓冲用完即清）
+    for s in shards:
+        with open(f'valid_links_{s}.txt', 'w', encoding='utf-8') as f:
+            f.write('')
+    print(f"✅ 已清空 {len(shards)} 个分片文件")
 
 if __name__ == '__main__':
     main()
