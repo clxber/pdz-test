@@ -4,29 +4,38 @@ import os
 import sys
 import argparse
 import re
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
 
 BASE_URL = "http://bfts.5read.com/pdz/"
 SUFFIX = "unRegister.pdz"
 SS_LIST_FILE = "ss_list.txt"
 TIMEOUT = 30
 REQUEST_DELAY = 0.25
-SHARD_A_END = 10441            # 分片 A：第 1~10441 条
-SHARD_B_END = 20882            # 分片 B：第 10442~20882 条
-SHARD_C_END = 31323            # 分片 C：第 20883~31323 条
-SHARD_D_END = 41764            # 分片 D：第 31324~41764 条
-SHARD_E_END = 52205            # 分片 E：第 41765~52205 条
-SHARD_F_END = 62646            # 分片 F：第 52206~62646 条
-SHARD_G_END = 73087            # 分片 G：第 62647~73087 条；分片 H：第 73088~83527 条
-SNAPSHOT_DIR = "snapshots"     # 快照目录
+SHARD_A_END = 10441
+SHARD_B_END = 20882
+SHARD_C_END = 31323
+SHARD_D_END = 41764
+SHARD_E_END = 52205
+SHARD_F_END = 62646
+SHARD_G_END = 73087
+SNAPSHOT_DIR = "snapshots"
+
+# 北京时区 + 停止线
+BJ_TZ = timezone(timedelta(hours=8))
+STOP_HOUR = 23
+STOP_MINUTE = 50
 
 # 全局：由 --shard 参数决定
 SHARD = ""
 PROGRESS_FILE = "progress.txt"
 VALID_OUTPUT_FILE = "valid_links.txt"
 
+def is_past_stop_time():
+    """是否到达北京 23:50 停止线"""
+    now = datetime.now(BJ_TZ)
+    return (now.hour > STOP_HOUR) or (now.hour == STOP_HOUR and now.minute >= STOP_MINUTE)
+
 def configure_files(shard):
-    """根据分片标识设置文件名"""
     global SHARD, PROGRESS_FILE, VALID_OUTPUT_FILE
     SHARD = shard
     if shard in ("a", "b", "c", "d", "e", "f", "g", "h"):
@@ -61,11 +70,6 @@ def load_ss_list():
     return full
 
 def load_valid_set():
-    """
-    读取有效链接集合：
-    - 历史存档 valid_links.txt
-    - 本分片自己的 valid_links_a.txt ~ valid_links_h.txt
-    """
     valid_set = set()
     files_to_read = ["valid_links.txt"]
     if SHARD in ("a", "b", "c", "d", "e", "f", "g", "h"):
@@ -106,12 +110,10 @@ def append_valid_link(url):
         f.write(url + "\n")
 
 def cleanup_old_snapshots(keep_days=10):
-    """清理 snapshots/ 目录下超过保留天数的快照"""
     if not os.path.isdir(SNAPSHOT_DIR):
         return
     cutoff_str = (date.today() - timedelta(days=keep_days)).isoformat()
     for f in os.listdir(SNAPSHOT_DIR):
-        # 只处理 valid_*.txt 格式，避免误删其他文件
         if not (f.startswith("valid_") and f.endswith(".txt")):
             continue
         match = re.search(r'(\d{4}-\d{2}-\d{2})', f)
@@ -143,8 +145,7 @@ def create_snapshot():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--max-minutes', type=int, default=350)
-    parser.add_argument('--shard', type=str, default='',
-                        help='分片标识：a / b / c / d / e / f / g / h，留空为单线程模式')
+    parser.add_argument('--shard', type=str, default='')
     args = parser.parse_args()
     configure_files(args.shard)
     max_run_seconds = args.max_minutes * 60
@@ -156,7 +157,6 @@ def main():
     valid_set = load_valid_set()
     print(f"✅ 当前有效SS数（含历史）：{len(valid_set)}")
 
-    # 语义修正：检查本分片的每一条是否都已在有效集合里
     if all(ss in valid_set for ss in ss_list):
         print("🎉 本分片所有SS已有效，任务完成。")
         set_progress(-1)
@@ -166,7 +166,6 @@ def main():
 
     cur = get_progress()
 
-    # 分片完成后不自动重置，直接退出等待其他分片
     if cur == -1:
         print(f"⏸️ 分片 {SHARD} 已完成，等待其他分片...")
         return
@@ -179,6 +178,15 @@ def main():
 
     start_time = time.time()
     while cur < total:
+        # ★ 23:50 停止线检查
+        if is_past_stop_time():
+            print(f"\n🛑 北京时间 {datetime.now(BJ_TZ).strftime('%H:%M')}，达到 23:50 停止线")
+            print(f"   已扫到 {cur}/{total}，标记为可合并退出")
+            set_progress(-1)
+            create_snapshot()
+            cleanup_old_snapshots()
+            return
+
         elapsed = time.time() - start_time
         if elapsed > max_run_seconds:
             set_progress(cur)
