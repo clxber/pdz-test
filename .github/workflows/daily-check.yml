@@ -1,4 +1,4 @@
-name: PDZ 自动检测（8 分片 + 完成合并 + 无缝触发 + 智能兜底 + 0-6点过滤）
+name: PDZ 自动检测（8 分片 + 23:50 停止 + 6:00 兜底）
 
 on:
   schedule:
@@ -23,10 +23,13 @@ jobs:
         id: check
         run: |
           BJ_HOUR=$(TZ='Asia/Shanghai' date +%H)
+          BJ_MIN=$(TZ='Asia/Shanghai' date +%M)
+          BJ_TOTAL=$((BJ_HOUR * 60 + BJ_MIN))   # 一天中的第几分钟
 
-          # ★ 禁止时段：北京 0-6 点，任何触发都拒绝
-          if [ "$BJ_HOUR" -ge 0 ] && [ "$BJ_HOUR" -lt 6 ]; then
-            echo "🛑 北京 0-6 点（当前北京 ${BJ_HOUR}:00），禁止触发"
+          # ★ 禁止时段：北京 23:50 ~ 6:00
+          #   23:50 = 1430 分钟，6:00 = 360 分钟
+          if [ "$BJ_TOTAL" -ge 1430 ] || [ "$BJ_TOTAL" -lt 360 ]; then
+            echo "🛑 北京 ${BJ_HOUR}:${BJ_MIN} 在禁止时段（23:50~6:00），禁止触发"
             echo "should_run=false" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -35,21 +38,15 @@ jobs:
             echo "🟢 手动/无缝触发，放行"
             echo "should_run=true" >> $GITHUB_OUTPUT
           else
-            # 定时兜底
+            # ★ 兜底逻辑：看"今天 6:00 之后有没有提交过"
             LAST_COMMIT_TS=$(git log -1 --format=%ct)
-            NOW=$(date +%s)
-            DIFF=$((NOW - LAST_COMMIT_TS))
-            LAST_BJ_HOUR=$(TZ='Asia/Shanghai' date -d @$LAST_COMMIT_TS +%H)
+            TODAY_6AM=$(TZ='Asia/Shanghai' date -d 'today 06:00' +%s)
 
-            # 如果最近提交发生在禁止时段内 → 循环可能被时段阻断了，允许兜底触发
-            if [ "$LAST_BJ_HOUR" -ge 0 ] && [ "$LAST_BJ_HOUR" -lt 6 ]; then
-              echo "🟡 最近提交发生在禁止时段内（北京 ${LAST_BJ_HOUR}:00），允许兜底触发"
-              echo "should_run=true" >> $GITHUB_OUTPUT
-            elif [ $DIFF -lt 43200 ]; then
-              echo "🟢 循环健康运行中（最近12小时内有提交），跳过兜底触发"
+            if [ "$LAST_COMMIT_TS" -ge "$TODAY_6AM" ]; then
+              echo "🟢 今天 6:00 之后已跑过（循环健康），跳过兜底"
               echo "should_run=false" >> $GITHUB_OUTPUT
             else
-              echo "🔴 循环可能中断，执行兜底触发"
+              echo "🔴 今天 6:00 之后还没跑过，执行兜底触发"
               echo "should_run=true" >> $GITHUB_OUTPUT
             fi
           fi
@@ -441,17 +438,20 @@ jobs:
             echo "TRIGGER=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: 立即触发下一轮（带 0-6 点过滤）
+      - name: 立即触发下一轮（带 23:50~6:00 过滤）
         if: steps.check.outputs.TRIGGER == 'true'
         run: |
-          # ★ 北京 0-6 点不触发
+          # ★ 禁止触发时段：北京 23:50 ~ 6:00
           BJ_HOUR=$(TZ='Asia/Shanghai' date +%H)
-          if [ "$BJ_HOUR" -ge 0 ] && [ "$BJ_HOUR" -lt 6 ]; then
-            echo "🛑 北京 ${BJ_HOUR}:00 在禁止时段（0-6点），跳过触发下一轮"
+          BJ_MIN=$(TZ='Asia/Shanghai' date +%M)
+          BJ_TOTAL=$((BJ_HOUR * 60 + BJ_MIN))
+
+          if [ "$BJ_TOTAL" -ge 1430 ] || [ "$BJ_TOTAL" -lt 360 ]; then
+            echo "🛑 北京 ${BJ_HOUR}:${BJ_MIN} 在禁止时段（23:50~6:00），跳过触发下一轮"
             echo "   下一轮将由北京 6:00 的定时兜底触发"
             exit 0
           fi
-          echo "🟢 北京 ${BJ_HOUR}:00 不在禁止时段，触发下一轮"
+          echo "🟢 北京 ${BJ_HOUR}:${BJ_MIN} 不在禁止时段，触发下一轮"
           gh workflow run daily-check.yml
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
