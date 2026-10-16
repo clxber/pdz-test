@@ -10,7 +10,7 @@ BASE_URL = "http://bfts.5read.com/pdz/"
 SUFFIX = "unRegister.pdz"
 SS_LIST_FILE = "ss_list.txt"
 TIMEOUT = 30
-REQUEST_DELAY = 0.25
+REQUEST_DELAY = 0.10           # ★ 由 0.25 改为 0.10
 SHARD_A_END = 10441            # 分片 A：第 1~10441 条
 SHARD_B_END = 20882            # 分片 B：第 10442~20882 条
 SHARD_C_END = 31323            # 分片 C：第 20883~31323 条
@@ -186,7 +186,7 @@ def main():
 
     print(f"⏳ 从索引 {cur} 开始")
 
-    # ★★★ 新增：建立 Session，复用 TCP/TLS 连接（keep-alive）★★★
+    # ★ 建立 Session，复用 TCP/TLS 连接（keep-alive）
     session = requests.Session()
 
     start_time = time.time()
@@ -216,7 +216,7 @@ def main():
             url = f"{BASE_URL}{ss}{SUFFIX}"
             print(f"[{SHARD or 'S'}:{cur+1}/{total}] 检测 {ss} ... ", end="")
             try:
-                # ★★★ 改用 session.head（复用连接）★★★
+                # ★ 用 session.head（复用连接）
                 r = session.head(url, timeout=TIMEOUT, allow_redirects=True)
                 if r.status_code == 200:
                     print("✅ 有效")
@@ -236,7 +236,6 @@ def main():
         create_snapshot()
         cleanup_old_snapshots()
     finally:
-        # ★ 关闭 Session，释放连接
         session.close()
 
 if __name__ == "__main__":
