@@ -18,16 +18,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 1     # ★ 由 0 改为 1，只拉最新一个 commit，加速克隆
       - name: 检查是否需要运行
         id: check
         run: |
           BJ_HOUR=$(TZ='Asia/Shanghai' date +%H)
           BJ_MIN=$(TZ='Asia/Shanghai' date +%M)
-          BJ_TOTAL=$((BJ_HOUR * 60 + BJ_MIN))   # 一天中的第几分钟
+          BJ_TOTAL=$((BJ_HOUR * 60 + BJ_MIN))
 
           # ★ 禁止时段：北京 23:50 ~ 6:00
-          #   23:50 = 1430 分钟，6:00 = 360 分钟
           if [ "$BJ_TOTAL" -ge 1430 ] || [ "$BJ_TOTAL" -lt 360 ]; then
             echo "🛑 北京 ${BJ_HOUR}:${BJ_MIN} 在禁止时段（23:50~6:00），禁止触发"
             echo "should_run=false" >> $GITHUB_OUTPUT
@@ -38,7 +37,7 @@ jobs:
             echo "🟢 手动/无缝触发，放行"
             echo "should_run=true" >> $GITHUB_OUTPUT
           else
-            # ★ 兜底逻辑：看"今天 6:00 之后有没有提交过"
+            # ★ 兜底判断：看"今天 6:00 之后有没有提交过"
             LAST_COMMIT_TS=$(git log -1 --format=%ct)
             TODAY_6AM=$(TZ='Asia/Shanghai' date -d 'today 06:00' +%s)
 
@@ -441,7 +440,6 @@ jobs:
       - name: 立即触发下一轮（带 23:50~6:00 过滤）
         if: steps.check.outputs.TRIGGER == 'true'
         run: |
-          # ★ 禁止触发时段：北京 23:50 ~ 6:00
           BJ_HOUR=$(TZ='Asia/Shanghai' date +%H)
           BJ_MIN=$(TZ='Asia/Shanghai' date +%M)
           BJ_TOTAL=$((BJ_HOUR * 60 + BJ_MIN))
