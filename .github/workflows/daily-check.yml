@@ -1,8 +1,8 @@
-name: PDZ 自动检测（8 分片 + 23:50 停止 + 9:00 兜底）
+name: PDZ 自动检测（8 分片 + 18:00兜底）
 
 on:
   schedule:
-    - cron: '0 1 * * *'    # ★ UTC 1:00 = 北京 9:00，每天一次兜底
+    - cron: '0 10 * * *'   # ★ UTC 10:00 = 北京 18:00，每天一次兜底
   workflow_dispatch:
 
 concurrency:
@@ -26,10 +26,10 @@ jobs:
           BJ_MIN=$(TZ='Asia/Shanghai' date +%M)
           BJ_TOTAL=$((BJ_HOUR * 60 + BJ_MIN))
 
-          # ★ 禁止时段：北京 23:50 ~ 9:00
-          #   23:50 = 1430 分钟，9:00 = 540 分钟
-          if [ "$BJ_TOTAL" -ge 1430 ] || [ "$BJ_TOTAL" -lt 540 ]; then
-            echo "🛑 北京 ${BJ_HOUR}:${BJ_MIN} 在禁止时段（23:50~9:00），禁止触发"
+          # ★ 禁止时段：北京 23:50 ~ 18:00
+          #   23:50 = 1430 分钟，18:00 = 1080 分钟
+          if [ "$BJ_TOTAL" -ge 1430 ] || [ "$BJ_TOTAL" -lt 1080 ]; then
+            echo "🛑 北京 ${BJ_HOUR}:${BJ_MIN} 在禁止时段（23:50~18:00），禁止触发"
             echo "should_run=false" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -38,15 +38,15 @@ jobs:
             echo "🟢 手动/无缝触发，放行"
             echo "should_run=true" >> $GITHUB_OUTPUT
           else
-            # ★ 兜底判断：看"今天 9:00 之后有没有提交过"
+            # ★ 兜底判断：看"今天 18:00 之后有没有提交过"
             LAST_COMMIT_TS=$(git log -1 --format=%ct)
-            TODAY_9AM=$(TZ='Asia/Shanghai' date -d 'today 09:00' +%s)
+            TODAY_6PM=$(TZ='Asia/Shanghai' date -d 'today 18:00' +%s)
 
-            if [ "$LAST_COMMIT_TS" -ge "$TODAY_9AM" ]; then
-              echo "🟢 今天 9:00 之后已跑过（循环健康），跳过兜底"
+            if [ "$LAST_COMMIT_TS" -ge "$TODAY_6PM" ]; then
+              echo "🟢 今天 18:00 之后已跑过（循环健康），跳过兜底"
               echo "should_run=false" >> $GITHUB_OUTPUT
             else
-              echo "🔴 今天 9:00 之后还没跑过，执行兜底触发"
+              echo "🔴 今天 18:00 之后还没跑过，执行兜底触发"
               echo "should_run=true" >> $GITHUB_OUTPUT
             fi
           fi
@@ -438,16 +438,16 @@ jobs:
             echo "TRIGGER=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: 立即触发下一轮（带 23:50~9:00 过滤）
+      - name: 立即触发下一轮（带 23:50~18:00 过滤）
         if: steps.check.outputs.TRIGGER == 'true'
         run: |
           BJ_HOUR=$(TZ='Asia/Shanghai' date +%H)
           BJ_MIN=$(TZ='Asia/Shanghai' date +%M)
           BJ_TOTAL=$((BJ_HOUR * 60 + BJ_MIN))
 
-          if [ "$BJ_TOTAL" -ge 1430 ] || [ "$BJ_TOTAL" -lt 540 ]; then
-            echo "🛑 北京 ${BJ_HOUR}:${BJ_MIN} 在禁止时段（23:50~9:00），跳过触发下一轮"
-            echo "   下一轮将由北京 9:00 的定时兜底触发"
+          if [ "$BJ_TOTAL" -ge 1430 ] || [ "$BJ_TOTAL" -lt 1080 ]; then
+            echo "🛑 北京 ${BJ_HOUR}:${BJ_MIN} 在禁止时段（23:50~18:00），跳过触发下一轮"
+            echo "   下一轮将由北京 18:00 的定时兜底触发"
             exit 0
           fi
           echo "🟢 北京 ${BJ_HOUR}:${BJ_MIN} 不在禁止时段，触发下一轮"
