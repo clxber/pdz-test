@@ -1,8 +1,9 @@
-name: PDZ 自动检测（8 分片 + 18:00兜底）
+name: PDZ 自动检测（8 分片 + 多闹钟兜底）
 
 on:
   schedule:
-    - cron: '0 10 * * *'   # ★ UTC 10:00 = 北京 18:00，每天一次兜底
+    # ★ 北京 18:00, 20:00, 22:00 各唤醒一次（3 次机会防丢）
+    - cron: '0 10,12,14 * * *'
   workflow_dispatch:
 
 concurrency:
