@@ -1,2 +1,2 @@
 # pdz-test
-PDZ连通性测试宣告失败，成功率仅万分之六
+PDZ connectivity test declared failed, with a success rate of only 0.06%
